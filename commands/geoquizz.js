@@ -1,8 +1,7 @@
-var XMLHttpRequest = require("xmlhttprequest").XMLHttpRequest;
+const countries = require("../countries.json");
+var players_score;
 var cpt;
 var countries_selected;
-var countries;
-var players_list = [];
 function getRandom(arr, n) {
     var result = new Array(n),
         len = arr.length,
@@ -17,63 +16,99 @@ function getRandom(arr, n) {
     return result;
 }
 
+function sortByValue(jsObj){
+    var sortedArray = [];
+    for(var i in jsObj)
+    {
+        sortedArray.push([jsObj[i], i]);
+    }
+    return sortedArray.sort();
+}
+
 function manage(message, keys, cpt){
     if(keys[cpt] != undefined){
         message.channel.send("https://flagcdn.com/256x192/" + keys[cpt] +".png");
     }    
     else {
         message.channel.send("LA PARTIE EST TERMINER BANDE DE PD");
+        message.channel.send("VOICI LES SCORES :");
+        console.log();
+        for (let index = sortByValue(players_score).length - 1; index >= 0; index--) {
+            const element = sortByValue(players_score)[index];
+            message.channel.send(`<@${element[1]}> a obtenu ${element[0]} points`);
+        }
     }
-}
+  }
 
 module.exports = {
     name: "geo",
-    description: "faire un géoquizz",
+    description: "Faire un petit Géoquizz",
+    usage:"new | init | players | pass | response <the answer>",
     guildOnly: true,
-    cooldown:5,
-    execute(message) {       
-        if (message.content.split(" ")[1] === "set"){
+    cooldown:1,
+    execute(message,args) {   
+        if (args[0] === "new") {
+            players_score = {}
+            const filter = m => m.content.includes('register');
+            const collector = message.channel.createMessageCollector(filter, { time: 20000 });
+        
+            collector.on('collect', m => {
+                players_score[m.author.id] = 0;
+                m.channel.send(`<@${m.author.id}> s'est inscrit !`);        
+            });      
+
+            collector.on('end', () => {
+                console.log(players_score);
+            });      
+        }
+        if (args[0] === "players") {
+            message.channel.send("Voici la liste des joueurs : \n");
+             
+            Object.keys(players_score).forEach(function(key) {
+                message.channel.send(`<@${key}>`);
+            })
+        }
             
-            message.react('👌');
-            const filter = (reaction, user) => reaction.emoji.name === '👌' && user.id === '333713489799544832'
-            message.awaitReactions(filter, { time: 5000 })
-            .then(collected => console.log(`Collected ${collected.size} reactions`))
-            .catch(console.error);
-            
+        if (args[0] === "init") {
+            cpt = 0;
+            Object.keys(players_score).forEach(function(key) {
+                return players_score[key] = 0;
+            })
+        
+            keys = Object.keys(countries); 
+            countries_selected = getRandom(keys, 3);
+            manage(message, countries_selected, cpt);
         }
         
-        if (message.content.split(" ")[1] === "init"){
-            cpt = 0;
-            var HttpClient = function() {
-                this.get = function(aUrl, aCallback) {
-                    var anHttpRequest = new XMLHttpRequest();
-                    anHttpRequest.onreadystatechange = function() { 
-                        if (anHttpRequest.readyState == 4 && anHttpRequest.status == 200)
-                            aCallback(anHttpRequest.responseText);
-                    }
-            
-                    anHttpRequest.open( "GET", aUrl, true );            
-                    anHttpRequest.send( null );
-                }
+        if(args[0] === "pass"){
+            const filter = (reaction) => {
+                return ['👍'].includes(reaction.emoji.name);
             };
-            var client = new HttpClient();
-            client.get('https://flagcdn.com/fr/codes.json', function(response) {
-                // do something with response
-                countries = JSON.parse(response);
-                keys = Object.keys(countries); 
-                countries_selected = getRandom(keys, 5);
-                manage(message, countries_selected, cpt);
-                console.log(countries[countries_selected[cpt]]);
-            });
-        }
-        if(message.content.split(' ')[1] === "response"){
-            setTimeout(function(){ 
-                console.log();
-                if(message.content.split(' ').splice(2).join(' ') === countries[countries_selected[cpt]]){
-                    message.reply("Félicitations pédé");
+            message.awaitReactions(filter, { max: 1, time: 5000, errors: ['time'] })
+            .then(collected => {
+                const reaction = collected.first();
+        
+                if (reaction.count >= Object.keys(players_score).length/2) {
+                    message.reply('OK TA GAGNER ON VA PASSER');
                     manage(message, countries_selected, ++cpt);
                 }
-            }, 1000);
-        } 
-    },
+            });    
+        }
+
+        else if (countries_selected && args[0] !== "init" && args[0] !== "pass"){
+            if(args.join(' ').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "") === countries[countries_selected[cpt]].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "")){
+                if(message.author.id in players_score){
+                    message.reply("Félicitations pédé");
+                    players_score[message.author.id] += 1;
+                    manage(message, countries_selected, ++cpt);
+                }
+                else {
+                    message.reply("TU JOUES PAS TOI");
+                }
+            }
+            else {
+                message.reply("HAHAHA PAS LA BONNE REPONSE CHEH !");
+            }
+        }            
+    }
   };
